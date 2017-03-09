@@ -10,7 +10,7 @@
 
 (defn dev-system []
   (merge
-   (handler-demo.application/app-system)
+   (handler-demo.application/prod-system {:web-port 10101})
    (component/system-map
     :figwheel-system (fw-sys/figwheel-system (fw-config/fetch-config))
     :css-watcher (fw-sys/css-watcher {:watch-paths ["resources/public/css"]}))))

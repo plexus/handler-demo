@@ -1,141 +1,67 @@
 # handler-demo
 
+A demonstration of [system issue#106](https://github.com/danielsz/system/issues/106).
 
-## Development
+This app contains two routes
 
-Open a terminal and type `lein repl` to start a Clojure REPL
-(interactive prompt).
+- `GET /`
+- `POST /webhook`
 
-In the REPL, type
+The first one is wrapped in a middleware that checks for an `X-CSRF-TOKEN`
+header. If the request is a POST, and the header is not present, then it returns
+a `403 Not Allowed`.
 
-```clojure
-(run)
-(browser-repl)
+So the setup is like this (pseudocode)
+
+``` clojure
+(routes
+  (csrf-middleware (GET "/" ,,,))
+  (POST "/webhook" ,,,))
 ```
 
-The call to `(run)` starts the Figwheel server at port 3449, which takes care of
-live reloading ClojureScript code and CSS. Figwheel's server will also act as
-your app server, so requests are correctly forwarded to the http-handler you
-define.
+The `POST /webhook` route sits outside of this middleware. Webhooks have their
+own authentication, this route should not care about CSRF tokens.
 
-Running `(browser-repl)` starts the Figwheel ClojureScript REPL. Evaluating
-expressions here will only work once you've loaded the page, so the browser can
-connect to Figwheel.
-
-When you see the line `Successfully compiled "resources/public/app.js" in 21.36
-seconds.`, you're ready to go. Browse to `http://localhost:3449` and enjoy.
-
-**Attention: It is not needed to run `lein figwheel` separately. Instead we
-launch Figwheel directly from the REPL**
-
-## Trying it out
-
-If all is well you now have a browser window saying 'Hello Chestnut',
-and a REPL prompt that looks like `cljs.user=>`.
-
-Open `resources/public/css/style.css` and change some styling of the
-H1 element. Notice how it's updated instantly in the browser.
-
-Open `src/cljs/handler-demo/core.cljs`, and change `dom/h1` to
-`dom/h2`. As soon as you save the file, your browser is updated.
-
-In the REPL, type
+But even though the middleware does not wrap `POST /webhook`, it still rejects
+requests intended for it.
 
 ```
-(ns handler-demo.core)
-(swap! app-state assoc :text "Interactivity FTW")
+$ curl localhost:10101
+app OK
+$ curl -X POST localhost:10101/webhook
+POST requests must include CSRF token header
 ```
 
-Notice again how the browser updates.
+The reason is that `ring.core/routes` only "cascades" to the next route if the
+previous route returned `nil`. In this case the middleware kicks in first, and
+returns 403, causing `ring.core/routes` to stop routing, and so `POST /webhook`
+is never reached.
 
-### Lighttable
+The solution would be to have the webhook route come first
 
-Lighttable provides a tighter integration for live coding with an inline
-browser-tab. Rather than evaluating cljs on the command line with the Figwheel
-REPL, you can evaluate code and preview pages inside Lighttable.
-
-Steps: After running `(run)`, open a browser tab in Lighttable. Open a cljs file
-from within a project, go to the end of an s-expression and hit Cmd-ENT.
-Lighttable will ask you which client to connect. Click 'Connect a client' and
-select 'Browser'. Browse to [http://localhost:3449](http://localhost:3449)
-
-View LT's console to see a Chrome js console.
-
-Hereafter, you can save a file and see changes or evaluate cljs code (without
-saving a file).
-
-### Emacs/CIDER
-
-CIDER is able to start both a Clojure and a ClojureScript REPL simultaneously,
-so you can interact both with the browser, and with the server. The command to
-do this is `M-x cider-jack-in-clojurescript`.
-
-We need to tell CIDER how to start a browser-connected Figwheel REPL though,
-otherwise it will use a JavaScript engine provided by the JVM, and you won't be
-able to interact with your running app.
-
-Put this in your Emacs configuration (`~/.emacs.d/init.el` or `~/.emacs`)
-
-``` emacs-lisp
-(setq cider-cljs-lein-repl
-      "(do (user/run)
-           (user/browser-repl))")
+``` clojure
+(routes
+  (POST "/webhook" ,,,)
+  (csrf-middleware (GET "/" ,,,)))
 ```
 
-Now `M-x cider-jack-in-clojurescript` (shortcut: `C-c M-J`, that's a capital
-"J", so `Meta-Shift-j`), point your browser at `http://localhost:3449`, and
-you're good to go.
+But because of the way `system.components.handler` works, this is impossible.
+[Routes with their own middleware are always put first in the stack](https://github.com/danielsz/system/blob/master/src/system/components/handler.clj#L33-L43).
+There is now way to influence this ordering
 
-## Testing
+## Running the code
 
-To run the Clojure tests, use
+Just do `lein repl`, it will start the system, Jetty will run at port 10101.
 
-``` shell
-lein test
+```
+$ curl localhost:10101
+app OK
 ```
 
-To run the Clojurescript you use [doo](https://github.com/bensu/doo). This can
-run your tests against a variety of JavaScript implementations, but in the
-browser and "headless". For example, to test with PhantomJS, use
-
-``` shell
-lein doo phantom
-```
-
-## Deploying to Heroku
-
-This assumes you have a
-[Heroku account](https://signup.heroku.com/dc), have installed the
-[Heroku toolbelt](https://toolbelt.heroku.com/), and have done a
-`heroku login` before.
-
-``` sh
-git init
-git add -A
-git commit
-heroku create
-git push heroku master:master
-heroku open
-```
-
-## Running with Foreman
-
-Heroku uses [Foreman](http://ddollar.github.io/foreman/) to run your
-app, which uses the `Procfile` in your repository to figure out which
-server command to run. Heroku also compiles and runs your code with a
-Leiningen "production" profile, instead of "dev". To locally simulate
-what Heroku does you can do:
-
-``` sh
-lein with-profile -dev,+production uberjar && foreman start
-```
-
-Now your app is running at
-[http://localhost:5000](http://localhost:5000) in production mode.
 
 ## License
 
-Copyright © 2016 FIXME
+Copyright © 2016 Arne Brasseur
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
