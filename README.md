@@ -2,6 +2,8 @@
 
 A demonstration of [system issue#106](https://github.com/danielsz/system/issues/106).
 
+The relevant code is [in the `handler-demo.application` namespace](https://github.com/plexus/handler-demo/blob/master/src/clj/handler_demo/application.clj).
+
 This app contains two routes
 
 - `GET /`
